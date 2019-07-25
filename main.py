@@ -4,8 +4,9 @@ import cgi
 
 app = Flask(__name__)
 app.config['DEBUG'] = True      # displays runtime errors in the browser, too
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://flicklist:MyNewPass@localhost:8889/flicklist'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://flicklist:FlaskIsFun@localhost:8889/flicklist'
 app.config['SQLALCHEMY_ECHO'] = True
+# pylint: disable=no-member
 
 db = SQLAlchemy(app)
 
@@ -60,9 +61,14 @@ def register():
         password = request.form['password']
         if not is_email(email):
             flash('zoiks! "' + email + '" does not seem like an email address')
+            return redirect('/register')            
+        if request.form['verify'] != password:
+            flash("Egads! Passwords don't match!")
+            return redirect('/register')        
+        test_user = User.query.filter_by(email=email).first()
+        if (test_user):
+            flash('Damn, that email is already in use!')
             return redirect('/register')
-        # TODO 1: validate that form value of 'verify' matches password
-        # TODO 2: validate that there is no user with that email already
         user = User(email=email, password=password)
         db.session.add(user)
         db.session.commit()
@@ -70,6 +76,21 @@ def register():
         return redirect("/")
     else:
         return render_template('register.html')
+
+@app.route('/login', methods=['POST', 'GET'])
+def login():
+    if request.method == 'POST':
+        email = request.form['email']
+        password = request.form['password']
+        user = User.query.filter_by(email=email).first()
+        if user and user.password == password:
+            session['email'] = email
+            flash("Logged in")
+            return redirect('/')
+        else:
+            flash("User name or password incorrect", "error")            
+
+    return render_template('login.html')
 
 def is_email(string):
     # for our purposes, an email string has an '@' followed by a '.'
@@ -160,8 +181,9 @@ def index():
 #         It should contain 'register' and 'login'.
 @app.before_request
 def require_login():
-    if not ('user' in session or request.endpoint == 'register'):
-        return redirect("/register")
+    allowed_routes = ['login', 'register']
+    if request.endpoint not in allowed_routes and 'email' not in session:
+        return redirect("/login")
 
 # In a real application, this should be kept secret (i.e. not on github)
 # As a consequence of this secret being public, I think connection snoopers or
